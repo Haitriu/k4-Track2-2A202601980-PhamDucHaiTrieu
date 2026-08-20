@@ -3,8 +3,8 @@
   "mean_ms": {
     "embed": 0.0,
     "retrieve": 0.2,
-    "llm": 15211.9,
-    "total": 15212.2
+    "llm": 9603.7,
+    "total": 9604.0
   },
   "results": [
     {
@@ -28,14 +28,14 @@
       "timings_ms": {
         "embed": 0.0,
         "retrieve": 0.2,
-        "llm": 19260.3,
-        "total": 19260.6
+        "llm": 11572.5,
+        "total": 11572.8
       },
       "server_timings": {
-        "prompt_n": 150,
-        "prompt_ms": 6157.31,
+        "prompt_n": 149,
+        "prompt_ms": 3279.819,
         "predicted_n": 30,
-        "predicted_ms": 8970.557
+        "predicted_ms": 3293.914
       }
     },
     {
@@ -59,14 +59,14 @@
       "timings_ms": {
         "embed": 0.0,
         "retrieve": 0.2,
-        "llm": 13043.2,
-        "total": 13043.5
+        "llm": 8552.0,
+        "total": 8552.3
       },
       "server_timings": {
         "prompt_n": 114,
-        "prompt_ms": 2995.942,
+        "prompt_ms": 2380.795,
         "predicted_n": 23,
-        "predicted_ms": 6403.111
+        "predicted_ms": 2534.965
       }
     },
     {
@@ -90,14 +90,14 @@
       "timings_ms": {
         "embed": 0.0,
         "retrieve": 0.2,
-        "llm": 13332.3,
-        "total": 13332.6
+        "llm": 8686.5,
+        "total": 8686.8
       },
       "server_timings": {
         "prompt_n": 113,
-        "prompt_ms": 3006.233,
+        "prompt_ms": 2394.018,
         "predicted_n": 24,
-        "predicted_ms": 6699.352
+        "predicted_ms": 2655.435
       }
     }
   ]

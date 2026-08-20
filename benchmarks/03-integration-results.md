@@ -5,12 +5,12 @@ retrieval backend: **keyword overlap** · 3 queries
 
 | Query | Contexts retrieved | embed (ms) | retrieve (ms) | llm (ms) | total (ms) |
 |:--|--:|--:|--:|--:|--:|
-| Why is goodput more useful than raw throughp... | goodput, paged, radix | 0.0 | 0.2 | 19260.3 | 19260.6 |
-| What problem does PagedAttention actually so... | paged, radix, disagg | 0.0 | 0.2 | 13043.2 | 13043.5 |
-| When does splitting prefill and decode help?... | disagg, radix, batching | 0.0 | 0.2 | 13332.3 | 13332.6 |
+| Why is goodput more useful than raw throughp... | goodput, paged, radix | 0.0 | 0.2 | 11572.5 | 11572.8 |
+| What problem does PagedAttention actually so... | paged, radix, disagg | 0.0 | 0.2 | 8552.0 | 8552.3 |
+| When does splitting prefill and decode help?... | disagg, radix, batching | 0.0 | 0.2 | 8686.5 | 8686.8 |
 
 Mean per stage (ms): embed **0.0** · retrieve **0.2** ·
-llm **15211.9** · total **15212.2**
+llm **9603.7** · total **9604.0**
 Dominant stage: **llm** (100% of total)
 
 ## Answers returned
@@ -38,22 +38,23 @@ Dominant stage: **llm** (100% of total)
   falls back to a plain keyword-overlap scorer against `TOY_DOCS` — it genuinely ranks
   and returns the top-3 docs by matching query terms, it just isn't semantic search.
 - **N19 (generation / LLM call)**: **real**. Every answer above came from an actual HTTP
-  call to the local `llama-server` (Gemma 4 E2B, CPU-only) — no canned responses,
-  no mocking.
+  call to the local `llama-server` (Gemma 4 E2B, GPU offload active on the Quadro M2200) —
+  no canned responses, no mocking.
 
 **Is the dominant stage what I expected?** Yes. `llm` is 100% of total latency
-(mean 15211.9 ms of 15212.2 ms total) — embed and retrieve are ~0 ms because they're
-just Python dict/string lookups over 6 tiny toy documents, not real vector search. On a
-real N17/N18 stack with an embedding server round-trip and an actual ANN index over
-thousands of documents, retrieve would no longer be free, but it would still be small
-next to a multi-second LLM decode on this CPU-only setup.
+(mean 9603.7 ms of 9604.0 ms total) — embed and retrieve are ~0 ms because they're
+just Python dict/string lookups over 6 tiny toy documents, not real vector search. With
+GPU offload this run is ~1.6x faster end-to-end than the earlier CPU-only pipeline run
+(9603.7 ms vs 15211.9 ms mean), which lines up with the ~1.9x-2.8x decode speedup GPU
+gave in `01-quickstart-results.md` and `01-tuning-tg128.md` — llm dominates either way,
+GPU just makes that dominant stage itself faster.
 
-**Where I'd attack to halve latency**: the `llm` stage, specifically **decode**, not
-prefill. Per-query server timings show prefill costs 3–6s but decode costs 6.4–9.0s for
-only 23–30 output tokens — consistent with the ~3 tok/s CPU decode rate measured in
-`01-quickstart-results.md`. The retrieval/embedding stages are already free in this
-run, so optimizing them buys nothing; the two levers that actually move `llm` time are
-(1) the thread-count tuning already found in `01-tuning-tg128.md` (`-t 8` gives 2.62x
-raw decode throughput), and (2) shortening `max_tokens` per answer, since decode cost is
-linear in output length and this pipeline doesn't need long answers to prove the
+**Where I'd attack to halve latency**: still the `llm` stage, specifically **decode**.
+Per-query server timings show prefill now costs 2.4–3.3s but decode still costs
+2.5–3.3s for only 23–30 output tokens even with GPU offload — retrieval/embedding are
+already free, so there's nothing to gain there. The two levers that would actually move
+`llm` time further are (1) `--parallel`/batching tuning from `02-server-results.md`
+(this pipeline runs one request at a time, so it never benefits from continuous batching
+the way the load tests do), and (2) shortening `max_tokens` per answer, since decode
+cost is linear in output length and this pipeline doesn't need long answers to prove
 context was retrieved correctly.

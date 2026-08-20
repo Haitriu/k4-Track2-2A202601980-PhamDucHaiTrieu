@@ -6,9 +6,10 @@
 >
 > `make verify` sẽ fail nếu còn placeholder chưa điền. Đó là cố ý.
 
-**Họ Tên:** _<Họ Tên>_
-**Cohort:** _<A20-K1 / A20-K2 / ...>_
-**Ngày submit:** _<YYYY-MM-DD>_
+**Họ Tên:** Phạm Đức Hải Triều
+**Cohort:** K4 (suy từ tên repo `k4-Track2-...` — báo lại nếu không đúng)
+**Mã số sinh viên:** 202601980
+**Ngày submit:** 2026-08-20
 
 ---
 
@@ -21,9 +22,10 @@
 - **Cores:** 4 physical / 8 logical
 - **CPU extensions:** không do `make probe` thu thập; theo spec dòng CPU (Skylake mobile) là AVX2
 - **RAM:** 15.9 GB
-- **Accelerator:** CPU only (thực tế). Máy có GPU NVIDIA Quadro M2200 (4096 MiB) và Vulkan,
-  `make probe` đề xuất build CUDA, nhưng **CUDA offload treo vô thời hạn** lúc khởi tạo
-  (xem "Setup story" bên dưới) nên toàn bộ base track chạy `ngl=0`.
+- **Accelerator:** NVIDIA Quadro M2200 (4096 MiB), CUDA offload **ACTIVE** (`ngl=99`).
+  Ban đầu chạy tự động lần đầu bị treo vô thời hạn lúc khởi tạo CUDA (nghi cold-start
+  JIT/PTX compile cho kiến trúc Maxwell đời cũ, hoặc tiến trình cũ còn giữ context GPU);
+  các lần chạy sau (bench, tune-server, load test, pipeline) GPU hoạt động ổn định.
 - **llama.cpp asset đã tải:** `llama-b10488-bin-win-cuda-12.4-x64.zip` + `cudart-llama-bin-win-cuda-12.4-x64.zip`
 - **Model đã dùng:** Gemma 4 E2B (`LAB_MODEL=gemma4-e2b`)
 - **Quantization:** UD-Q4_K_XL (primary) + UD-Q2_K_XL (compare) (từ `models/active.json`)
@@ -31,10 +33,12 @@
 **Chạy ở đâu:** laptop của tôi
 
 **Setup story** (≤ 80 chữ): `lab.ps1` báo lỗi parse trên Windows PowerShell 5.1 vì file
-UTF-8 thiếu BOM khiến ký tự Unicode làm hỏng parser — thêm BOM là chạy được. Nghiêm
-trọng hơn: `llama-server` build CUDA treo vô thời hạn khi khởi tạo GPU trên Quadro M2200
-đời cũ — không crash, chỉ đứng im sau bước load model. Ép `LAB_N_GPU_LAYERS=0` (CPU-only)
-thì load bình thường trong ~28s. Toàn bộ 100 điểm base không cần GPU nên không mất điểm.
+UTF-8 thiếu BOM khiến ký tự Unicode làm hỏng parser — thêm BOM là chạy được. GPU CUDA
+lúc đầu treo vô thời hạn ở lần chạy tự động đầu tiên nên tôi tạm ép CPU-only để không
+mất tiến độ; các lần chạy tay sau đó (`bench`, `serve`, `load test`, `pipeline`) GPU lên
+bình thường (`ACTIVE`, xem screenshot `01-hardware-probe.png`) nên toàn bộ số liệu cuối
+cùng trong report này dùng GPU. Phần thread-tuning (§5) vẫn đo bằng CPU vì đó là câu
+hỏi riêng về threads, không phụ thuộc GPU.
 
 ---
 
@@ -44,13 +48,13 @@ thì load bình thường trong ~28s. Toàn bộ 100 điểm base không cần G
 
 | Quantization | Size (GB) | Load (ms) | TTFT P50/P95 (ms) | TPOT P50/P95 (ms) | E2E P50/P95/P99 (ms) | Decode (tok/s) |
 |---|--:|--:|--:|--:|--:|--:|
-| UD-Q4_K_XL | 2.97 | 17238 | 4965 / 8749 | 319.7 / 364.7 | 24554 / 29132 / 29132 | 3.1 |
-| UD-Q2_K_XL | 2.24 | 25116 | 6503 / 7516 | 385.5 / 450.7 | 30346 / 35908 / 35908 | 2.6 |
+| UD-Q4_K_XL | 2.97 | 52279 | 2630 / 2716 | 114.8 / 121.0 | 9819 / 10338 / 10338 | 8.7 |
+| UD-Q2_K_XL | 2.24 | 19802 | 2711 / 2770 | 157.7 / 159.6 | 12555 / 12798 / 12798 | 6.3 |
 
-**Quan sát** (≤ 60 chữ): Q2 **không đáng dùng** trên máy này — nhẹ hơn 0.73 GB nhưng
-decode **chậm hơn** 1.19× (2.6 vs 3.1 tok/s) vì máy compute-limited (4 core, không GPU),
-nên chi phí dequantize 2-bit tốn hơn phần bytes tiết kiệm. Đã hỏi cùng câu ("why is
-the sky blue") trên `--compare` (port 8090): chất lượng gần như tương đương, không
+**Quan sát** (≤ 60 chữ): Với GPU (Quadro M2200) bật, Q2 vẫn **không đáng dùng** — nhẹ
+hơn 0.73 GB nhưng decode **chậm hơn 1.38×** (6.3 vs 8.7 tok/s) và TTFT P95 còn tệ hơn cả
+Q4. GPU 4GB đủ chứa model nhưng dequantize 2-bit tốn compute hơn 4-bit. Hỏi cùng câu
+("why is the sky blue") trên `--compare`: chất lượng gần như tương đương, không
 hallucination ở cả hai bản.
 
 ---
@@ -61,22 +65,22 @@ hallucination ở cả hai bản.
 
 | Users | RPS | P50 (ms) | P95 (ms) | P99 (ms) | Eff. concurrency | Failures |
 |--:|--:|--:|--:|--:|--:|--:|
-| 10 | 0.12 | 69000 | 104000 | 104000 | 7.9 | 0.0% |
-| 50 | 0.34 | 122000 | 122000 | 122000 | 35.4 | 65.5% |
+| 10 | 0.43 | 18000 | 33000 | 34000 | 8.4 | 0.0% |
+| 50 | 0.45 | 50000 | 105000 | 109000 | 24.3 | 0.0% |
 
-- **Offered load tăng 5×, throughput thực tăng:** 2.81×
-- **P95 tăng:** 1.17×
-- **Effective concurrency ở 50 users:** 35.4 so với `--parallel` = 4 slots
+- **Offered load tăng 5×, throughput thực tăng:** 1.07×
+- **P95 tăng:** 3.18×
+- **Effective concurrency ở 50 users:** 24.3 so với `--parallel` = 4 slots
 
 **Peak `llamacpp:n_busy_slots_per_decode`** (từ `make metrics` khi `make load-50` đang
-chạy): 3.77 / 4 slots
+chạy): 3.99 / 4 slots
 
-**Saturation reading** (≤ 80 chữ): Server bão hoà rõ ràng trước khi tới 50 users. Bằng
-chứng thuyết phục nhất: **65.5% request timeout ở 50 users** (0% ở 10 users) và P50=P95=P99
-đều dồn về ~122s — dấu hiệu queueing, không phải compute, vì service time thật không
-lệch nhau theo phân phối bình thường. `busy_slots` đạt đỉnh 3.77/4 xác nhận engine đã
-bão hoà compute. Knob đổi trước: `-t 8` thay vì `-t 4` (free 2.62× decode throughput từ
-`make tune`, không tốn thêm contention) trước khi đụng tới `--parallel`.
+**Saturation reading** (≤ 80 chữ): Với GPU, server bão hoà ở compute chứ không phải
+timeout — **0% failure cả 2 mức tải**, nhưng throughput chỉ tăng 1.07× khi tải tăng 5×
+(21% linear) trong khi P95 tăng 3.18×. `busy_slots` đạt đỉnh 3.99/4 (100%) ngay từ mức
+10 users — 4 slot GPU đã đầy, nên phần tải thêm chỉ biến thành queue time chứ không
+sinh thêm throughput. Đổi trước: tăng `--parallel` (không phải `-t`, vì bottleneck là
+slot GPU chứ không phải CPU thread) để engine batch nhiều sequence hơn mỗi decode step.
 
 ---
 
@@ -96,13 +100,13 @@ bão hoà compute. Knob đổi trước: `-t 8` thay vì `-t 4` (free 2.62× dec
 
 - embed: 0.0 ms
 - retrieve: 0.2 ms
-- llm: 15211.9 ms
+- llm: 9603.7 ms
 - **stage chiếm nhiều nhất:** llm (100% của total)
 
-**Reflection** (≤ 60 chữ): Đúng như kỳ vọng — decode CPU-only (~3 tok/s) áp đảo hoàn
-toàn embed/retrieve vốn chỉ là tra cứu dict/list rẻ tiền trên 6 toy doc. Để giảm 2×:
-tấn công decode qua `-t 8` (2.62× từ `make tune`) và giảm `max_tokens` mỗi câu trả lời,
-vì cost decode tuyến tính theo số token sinh ra.
+**Reflection** (≤ 60 chữ): Đúng như kỳ vọng — decode áp đảo hoàn toàn embed/retrieve
+(chỉ là tra cứu dict/list rẻ tiền trên 6 toy doc). Với GPU, pipeline nhanh hơn ~1.6× so
+với bản CPU-only (9.6s vs 15.2s). Để giảm 2× nữa: tấn công decode qua `--parallel`
+(pipeline hiện chạy tuần tự, không hưởng continuous batching) và giảm `max_tokens`.
 
 ---
 
