@@ -74,7 +74,10 @@ def is_committed(path: pathlib.Path) -> bool | None:
         rel = str(path.resolve().relative_to(labkit.repo_root()))
     except ValueError:
         return None
-    return rel in TRACKED
+    # `git ls-files` always uses forward slashes; pathlib uses the OS separator
+    # (backslash on Windows), so normalize before comparing or every path fails
+    # to match on Windows even when it genuinely is committed.
+    return rel.replace("\\", "/") in TRACKED
 
 
 class Report:
